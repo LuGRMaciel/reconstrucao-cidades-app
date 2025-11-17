@@ -1,0 +1,35 @@
+
+export type ID = string;
+
+export type Location = {
+  id: ID;
+  name: string;
+  description?: string;
+  address?: string;
+  lat?: number;
+  lon?: number;
+  createdAt: string;
+};
+
+export type HelpType = 'MATERIAL' | 'VOLUNTEER';
+export type RequestStatus = 'OPEN' | 'IN_PROGRESS' | 'DONE';
+
+export type HelpRequest = {
+  id: ID;
+  type: HelpType;
+  description: string;
+  createdBy: string; // user id or name (simplificado)
+  locationId?: ID;
+  status: RequestStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type HelpOffer = {
+  id: ID;
+  type: HelpType;
+  description: string;
+  offeredBy: string;
+  locationId?: ID;
+  createdAt: string;
+};

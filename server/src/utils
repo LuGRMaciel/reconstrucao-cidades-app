@@ -1,0 +1,2 @@
+export const nowISO = () => new Date().toISOString();
+export const uuid = () => crypto.randomUUID();
