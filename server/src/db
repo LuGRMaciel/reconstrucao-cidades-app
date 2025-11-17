@@ -1,0 +1,47 @@
+
+import Database from 'better-sqlite3';
+import path from 'path';
+import fs from 'fs';
+
+const dataDir = path.join(process.cwd(), 'data');
+if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+
+const dbPath = path.join(dataDir, 'app.sqlite');
+export const db = new Database(dbPath);
+
+db.pragma('journal_mode = WAL');
+
+// Schema
+const migrations = `
+CREATE TABLE IF NOT EXISTS locations (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  address TEXT,
+  lat REAL,
+  lon REAL,
+  createdAt TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS help_requests (
+  id TEXT PRIMARY KEY,
+  type TEXT NOT NULL,
+  description TEXT NOT NULL,
+  createdBy TEXT NOT NULL,
+  locationId TEXT,
+  status TEXT NOT NULL,
+  createdAt TEXT NOT NULL,
+  updatedAt TEXT NOT NULL,
+  FOREIGN KEY (locationId) REFERENCES locations(id)
+);
+CREATE TABLE IF NOT EXISTS help_offers (
+  id TEXT PRIMARY KEY,
+  type TEXT NOT NULL,
+  description TEXT NOT NULL,
+  offeredBy TEXT NOT NULL,
+  locationId TEXT,
+  createdAt TEXT NOT NULL,
+  FOREIGN KEY (locationId) REFERENCES locations(id)
+);
+`;
+
+db.exec(migrations);

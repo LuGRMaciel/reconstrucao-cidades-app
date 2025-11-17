@@ -1,0 +1,100 @@
+
+import express from 'express';
+import cors from 'cors';
+import { db } from './db';
+import { nowISO, uuid } from './utils';
+import { fetchWeather } from './services/weather';
+import type { Location, HelpOffer, HelpRequest, RequestStatus, HelpType } from './types';
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+app.get('/health', (_req, res) => res.json({ ok: true }));
+
+// Locations
+app.post('/locations', (req, res) => {
+  const { name, description, address, lat, lon } = req.body as Partial<Location>;
+  if (!name) return res.status(400).json({ error: 'name is required' });
+  const item: Location = { id: uuid(), name, description, address, lat, lon, createdAt: nowISO() };
+  const stmt = db.prepare('INSERT INTO locations (id,name,description,address,lat,lon,createdAt) VALUES (?,?,?,?,?,?,?)');
+  stmt.run(item.id, item.name, item.description, item.address, item.lat, item.lon, item.createdAt);
+  res.status(201).json(item);
+});
+
+app.get('/locations', (_req, res) => {
+  const rows = db.prepare('SELECT * FROM locations ORDER BY createdAt DESC').all();
+  res.json(rows);
+});
+
+// Help Requests
+app.post('/requests', (req, res) => {
+  const { type, description, createdBy, locationId } = req.body as Partial<HelpRequest>;
+  if (!type || !['MATERIAL','VOLUNTEER'].includes(String(type))) return res.status(400).json({ error: 'type invalid' });
+  if (!description) return res.status(400).json({ error: 'description is required' });
+  if (!createdBy) return res.status(400).json({ error: 'createdBy is required' });
+  const now = nowISO();
+  const item: HelpRequest = { id: uuid(), type: type as HelpType, description, createdBy, locationId, status: 'OPEN', createdAt: now, updatedAt: now };
+  db.prepare('INSERT INTO help_requests (id,type,description,createdBy,locationId,status,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,?)')
+    .run(item.id, item.type, item.description, item.createdBy, item.locationId, item.status, item.createdAt, item.updatedAt);
+  res.status(201).json(item);
+});
+
+app.get('/requests', (req, res) => {
+  const { status, createdBy } = req.query as { status?: RequestStatus; createdBy?: string };
+  let sql = 'SELECT * FROM help_requests';
+  const conds: string[] = [];
+  const params: any[] = [];
+  if (status) { conds.push('status = ?'); params.push(status); }
+  if (createdBy) { conds.push('createdBy = ?'); params.push(createdBy); }
+  if (conds.length) sql += ' WHERE ' + conds.join(' AND ');
+  sql += ' ORDER BY createdAt DESC';
+  const rows = db.prepare(sql).all(...params);
+  res.json(rows);
+});
+
+app.patch('/requests/:id/status', (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body as { status?: RequestStatus };
+  if (!status || !['OPEN','IN_PROGRESS','DONE'].includes(String(status))) return res.status(400).json({ error: 'status invalid' });
+  const now = nowISO();
+  const info = db.prepare('UPDATE help_requests SET status=?, updatedAt=? WHERE id=?').run(status, now, id);
+  if (!info.changes) return res.status(404).json({ error: 'request not found' });
+  const item = db.prepare('SELECT * FROM help_requests WHERE id=?').get(id);
+  res.json(item);
+});
+
+// Help Offers
+app.post('/offers', (req, res) => {
+  const { type, description, offeredBy, locationId } = req.body as Partial<HelpOffer>;
+  if (!type || !['MATERIAL','VOLUNTEER'].includes(String(type))) return res.status(400).json({ error: 'type invalid' });
+  if (!description) return res.status(400).json({ error: 'description is required' });
+  if (!offeredBy) return res.status(400).json({ error: 'offeredBy is required' });
+  const item: HelpOffer = { id: uuid(), type: type as any, description, offeredBy, locationId, createdAt: nowISO() };
+  db.prepare('INSERT INTO help_offers (id,type,description,offeredBy,locationId,createdAt) VALUES (?,?,?,?,?,?)')
+    .run(item.id, item.type, item.description, item.offeredBy, item.locationId, item.createdAt);
+  res.status(201).json(item);
+});
+
+app.get('/offers', (_req, res) => {
+  const rows = db.prepare('SELECT * FROM help_offers ORDER BY createdAt DESC').all();
+  res.json(rows);
+});
+
+// Public info: weather
+app.get('/public/weather', async (req, res) => {
+  const lat = Number(req.query.lat || req.query.latitude);
+  const lon = Number(req.query.lon || req.query.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return res.status(400).json({ error: 'lat/lon required' });
+  try {
+    const data = await fetchWeather(lat, lon);
+    res.json(data);
+  } catch (e: any) {
+    res.status(502).json({ error: e.message || 'weather error' });
+  }
+});
+
+const PORT = process.env.PORT || 4000;
+app.listen(PORT, () => console.log(`API running on http://localhost:${PORT}`));
+
+export default app;
